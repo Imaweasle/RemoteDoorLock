@@ -10,7 +10,7 @@
 #include "LCDDEFS.h"
 #include "LiquidCrystal_I2C.h"
 
-SYSTEM_MODE(SEMI_AUTOMATIC); // Set to Semi auto in order to only set cloud connectionn after bluetooth has connected
+SYSTEM_MODE(SEMI_AUTOMATIC); // We don't want the scanner to be connected, only the central, so we never connect this photon to the cloud
 
 // Run the application and system concurrently in separate threads
 //SYSTEM_THREAD(ENABLED);
