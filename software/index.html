@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Command & Log Doorlock - Final Project</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: auto;
+        }
+        header {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+        form {
+            margin-bottom: 20px;
+        }
+        #status, #manualStatus, #log {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 15px;
+            border-radius: 5px;
+        }
+        #log {
+            height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+
+<body>
+    <header><b>Doorlock Control Panel</b></header>
+
+    <!-- Door Control Form -->
+    <form id="doorForm">
+        <label><input type="radio" name="command" value="lock" required> Lock</label><br>
+        <label><input type="radio" name="command" value="unlock"> Unlock</label><br><br>
+        <button type="submit">Submit Door Command</button>
+    </form>
+
+    <!-- Manual Control Form -->
+    <form id="manualForm">
+        <label><input type="radio" name="manualCommand" value="freeze" required> Freeze (Manual Lock)</label><br>
+        <label><input type="radio" name="manualCommand" value="unfreeze"> Unfreeze (Manual Unlock)</label><br><br>
+        <button type="submit">Submit Manual Command</button>
+    </form>
+
+    <!-- Status Sections -->
+    <div id="status">
+        <strong>Door Status:</strong> <span id="doorStatus">Unknown</span>
+    </div>
+
+    <div id="manualStatus">
+        <strong>Manual Status:</strong> <span id="manualState">Unknown</span>
+    </div>
+
+    <!-- Log -->
+    <div id="log">
+        <strong>Event Log:</strong>
+        <ul id="eventLog" style="padding-left: 20px;"></ul>
+    </div>
+
+    <!-- Script Section -->
+    <script type="text/javascript">
+        const deviceID = "0a10aced202194944a065278"; // Your device ID
+        const accessToken = "82a1968eacb8b56f621873919fbc8db9b2a1d874"; // Your access token
+        const baseURL = "https://api.particle.io/v1/devices/";
+
+        // Door Status Fetch
+        let doorStatusFetchFailed = false;
+        let manualStatusFetchFailed = false;
+
+        function updateDoorStatus() {
+            $.ajax({
+                url: baseURL + deviceID + "/cV_doorState",
+                headers: { Authorization: "Bearer " + accessToken },
+                method: "GET",
+                success: function(resp) {
+                    const status = resp.result;
+                    $("#doorStatus").text(status);
+
+                    if (status === "unlocked") {
+                        $("#doorStatus").css("color", "green");
+                    } else if (status === "locked") {
+                        $("#doorStatus").css("color", "red");
+                    } else {
+                        $("#doorStatus").css("color", "black");
+                    }
+
+                    if (updateDoorStatus.lastState !== status) {
+                        logEvent("Door is now: " + status);
+                        updateDoorStatus.lastState = status;
+                    }
+                    doorStatusFetchFailed = false;
+                },
+                error: function() {
+                    if (!doorStatusFetchFailed) {
+                        logEvent("Error fetching door status from Particle.");
+                        doorStatusFetchFailed = true;
+                    }
+                }
+            });
+        }
+
+        function updateManualStatus() {
+            $.ajax({
+                url: baseURL + deviceID + "/cV_manualState",
+                headers: { Authorization: "Bearer " + accessToken },
+                method: "GET",
+                success: function(resp) {
+                    const status = resp.result;
+                    $("#manualState").text(status);
+
+                    if (status === "unlocked") {
+                        $("#manualState").css("color", "blue");
+                    } else if (status === "locked") {
+                        $("#manualState").css("color", "orange");
+                    } else {
+                        $("#manualState").css("color", "black");
+                    }
+
+                    if (updateManualStatus.lastState !== status) {
+                        logEvent("Manual lock is now: " + status);
+                        updateManualStatus.lastState = status;
+                    }
+                    manualStatusFetchFailed = false;
+                },
+                error: function() {
+                    if (!manualStatusFetchFailed) {
+                        logEvent("Error fetching manual lock status from Particle.");
+                        manualStatusFetchFailed = true;
+                    }
+                }
+            });
+        }
+
+        // Log Helper
+        function logEvent(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            $("#eventLog").prepend(`<li>[${timestamp}] ${message}</li>`);
+        }
+
+        // Document Ready
+        $(document).ready(function() {
+            // Door Form Submission
+            $("#doorForm").submit(function(e) {
+                e.preventDefault();
+
+                const command = $("input[name='command']:checked").val();
+                const cloudCommand = command === "lock" ? "locked" : "unlocked";
+
+                $.ajax({
+                    url: baseURL + deviceID + "/cF_forceDoorState",
+                    headers: { Authorization: "Bearer " + accessToken },
+                    method: "POST",
+                    data: { args: cloudCommand },
+                    success: function(resp) {
+                        if (resp.return_value === 1) {
+                            logEvent("Sent door command: " + cloudCommand);
+                            updateDoorStatus();
+                        } else {
+                            logEvent("Failed to send door command: " + cloudCommand);
+                        }
+                    },
+                    error: function() {
+                        logEvent("Error sending door command to Particle.");
+                    }
+                });
+            });
+
+            // Manual Form Submission
+            $("#manualForm").submit(function(e) {
+                e.preventDefault();
+
+                const manualCommand = $("input[name='manualCommand']:checked").val();
+                const cloudManualCommand = manualCommand === "freeze" ? "locked" : "unlocked";
+
+                $.ajax({
+                    url: baseURL + deviceID + "/cF_forceManualState",
+                    headers: { Authorization: "Bearer " + accessToken },
+                    method: "POST",
+                    data: { args: cloudManualCommand },
+                    success: function(resp) {
+                        if (resp.return_value === 1) {
+                            logEvent("Sent manual command: " + cloudManualCommand);
+                            updateManualStatus();
+                        } else {
+                            logEvent("Failed to send manual command: " + cloudManualCommand);
+                        }
+                    },
+                    error: function() {
+                        logEvent("Error sending manual command to Particle.");
+                    }
+                });
+            });
+
+            // Initial fetch
+            updateDoorStatus();
+            updateManualStatus();
+
+            // Poll every 5 seconds
+            setInterval(updateDoorStatus, 5000);
+            setInterval(updateManualStatus, 5000);
+        });
+    </script>
+
+</body>
+</html>
